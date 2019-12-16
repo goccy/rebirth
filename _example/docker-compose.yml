@@ -1,0 +1,13 @@
+version: '2'
+services:
+  app:
+    image: golang:1.13.5
+    container_name: rebirth_app
+    volumes:
+      - '.:/go/src/app'
+      - '..:/go/src/rebirth'
+    working_dir: /go/src/app
+    environment:
+      GO111MODULE: "on"
+    command: |
+      tail -f /dev/null
