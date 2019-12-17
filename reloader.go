@@ -10,35 +10,23 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/goccy/go-yaml"
 	"golang.org/x/xerrors"
 )
 
 const configDir = ".rebirth"
 
 var (
-	buildContextPath = filepath.Join(configDir, "build.yml")
-	buildPath        = filepath.Join(configDir, "program")
-	pidPath          = filepath.Join(configDir, "server.pid")
+	buildPath         = filepath.Join(configDir, "program")
+	pidPath           = filepath.Join(configDir, "server.pid")
+	dockerRebirthPath = filepath.Join(configDir, "__rebirth")
 )
-
-type buildContext struct {
-	GOOS   string `yaml:"goos"`
-	GOARCH string `yaml:"goarch"`
-}
-
-func (c *buildContext) toEnv() []string {
-	return []string{
-		fmt.Sprintf("GOOS=%s", c.GOOS),
-		fmt.Sprintf("GOARCH=%s", c.GOARCH),
-	}
-}
 
 type Reloader struct {
 	host *Host
@@ -51,14 +39,22 @@ func NewReloader(cfg *Config) *Reloader {
 	}
 }
 
-func (r *Reloader) Run(isServerMode bool) error {
-	if isServerMode {
-		if err := r.writeBuildContext(); err != nil {
-			return xerrors.Errorf("failed to write build context: %w", err)
-		}
+func (r *Reloader) Run() error {
+	if !r.IsEnabledReload() {
 		if err := r.writePID(); err != nil {
 			return xerrors.Errorf("failed to write pid: %w", err)
 		}
+		if err := r.reload(); err != nil {
+			return xerrors.Errorf("failed to reload: %w", err)
+		}
+	} else if r.isUsedDocker() && !r.isOnDockerContainer() {
+		if err := r.xbuildRebirth(); err != nil {
+			return xerrors.Errorf("failed to cross compile for rebirth: %w", err)
+		}
+		go r.execRebirthOnDockerContainer(
+			context.Background(),
+			r.host.Docker,
+		)
 	}
 	r.watchReloadSignal()
 	for {
@@ -67,8 +63,18 @@ func (r *Reloader) Run(isServerMode bool) error {
 	return nil
 }
 
+func (r *Reloader) IsEnabledReload() bool {
+	if !r.isUsedDocker() {
+		return true
+	}
+	if !r.isOnDockerContainer() {
+		return true
+	}
+	return false
+}
+
 func (r *Reloader) Reload() error {
-	if err := r.buildOnHostOS(); err != nil {
+	if err := r.xbuild(buildPath, "."); err != nil {
 		return xerrors.Errorf("failed to build on host: %w", err)
 	}
 	if err := r.sendReloadingSignal(); err != nil {
@@ -77,34 +83,46 @@ func (r *Reloader) Reload() error {
 	return nil
 }
 
-func (r *Reloader) loadBuildContext() (*buildContext, error) {
-	file, err := ioutil.ReadFile(buildContextPath)
-	if err != nil {
-		return nil, xerrors.Errorf("failed to read build config file: %w", err)
+func (r *Reloader) Close() error {
+	if !r.isUsedDocker() {
+		return nil
 	}
-	var ctx buildContext
-	if err := yaml.Unmarshal(file, &ctx); err != nil {
-		fmt.Println(yaml.FormatError(err, true, true))
-		return nil, nil
+	if r.isOnDockerContainer() {
+		if err := r.stopCurrentProcess(); err != nil {
+			return xerrors.Errorf("failed to stop current process: %w", err)
+		}
+		return nil
 	}
-	return &ctx, nil
-}
 
-func (r *Reloader) writeBuildContext() error {
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return xerrors.Errorf("failed to create config directory for rebirth: %w", err)
-	}
-	ctx, err := yaml.Marshal(&buildContext{
-		GOOS:   runtime.GOOS,
-		GOARCH: runtime.GOARCH,
-	})
+	pid, err := r.readPID()
 	if err != nil {
-		return xerrors.Errorf("failed to encode build context: %w", err)
+		return xerrors.Errorf("failed to read pid: %w", err)
 	}
-	if err := ioutil.WriteFile(buildContextPath, ctx, 0644); err != nil {
-		return xerrors.Errorf("failed to write build context file: %w", err)
+	containerName := r.host.Docker
+	command := []string{"kill", "-KQUIT", fmt.Sprint(pid)}
+	if _, err := r.execCommandOnDockerContainer(context.Background(), containerName, command); err != nil {
+		return xerrors.Errorf("failed to exec command on docker container: %w", err)
 	}
 	return nil
+}
+
+func (r *Reloader) xbuildRebirth() error {
+	_, file, _, _ := runtime.Caller(0)
+	rebirthDir := filepath.Dir(file)
+	cmdFile := filepath.Join(rebirthDir, "cmd", "rebirth", "main.go")
+	if err := r.xbuild(dockerRebirthPath, cmdFile); err != nil {
+		return xerrors.Errorf("failed to xbuild: %w", err)
+	}
+	return nil
+}
+
+func (r *Reloader) isUsedDocker() bool {
+	return r.host != nil && r.host.Docker != ""
+}
+
+func (r *Reloader) isOnDockerContainer() bool {
+	_, err := os.Stat(filepath.Join("/", ".dockerenv"))
+	return err == nil
 }
 
 func (r *Reloader) readPID() (int, error) {
@@ -134,10 +152,12 @@ func (r *Reloader) stopCurrentProcess() error {
 	if err := r.cmd.Stop(); err != nil {
 		return xerrors.Errorf("failed to stop process: %w", err)
 	}
+	r.cmd = nil
 	return nil
 }
 
 func (r *Reloader) reload() (e error) {
+	fmt.Println("restarting...")
 	if err := r.stopCurrentProcess(); err != nil {
 		return xerrors.Errorf("failed to stop current process: %w", err)
 	}
@@ -146,6 +166,7 @@ func (r *Reloader) reload() (e error) {
 	go func() {
 		if err := execCmd.Run(); err != nil {
 			fmt.Println(err)
+			r.cmd = nil
 		}
 	}()
 	return nil
@@ -163,20 +184,65 @@ func (r *Reloader) watchReloadSignal() {
 	}()
 }
 
-func (r *Reloader) buildOnHostOS() error {
-	ctx, err := r.loadBuildContext()
+func (r *Reloader) xbuild(target, source string) error {
+	env, err := r.buildEnv()
 	if err != nil {
-		return xerrors.Errorf("failed to get build context: %w", err)
+		return xerrors.Errorf("failed to get build env: %w", err)
 	}
-	cmd := NewCommand("go", "build", "-o", buildPath, ".")
-	cmd.AddEnv(ctx.toEnv())
+	cmd := NewCommand("go", "build", "-o", target, source)
+	cmd.AddEnv(env)
 	if err := cmd.Run(); err != nil {
 		return xerrors.Errorf("failed to command: %w", err)
 	}
 	return nil
 }
 
-func (r *Reloader) execCommandOnDockerContainer(ctx context.Context, containerName string, command []string) error {
+func (r *Reloader) buildEnv() ([]string, error) {
+	goos, err := r.buildGOOS()
+	if err != nil {
+		return nil, xerrors.Errorf("failed to get GOOS for build: %w", err)
+	}
+	goarch, err := r.buildGOARCH()
+	if err != nil {
+		return nil, xerrors.Errorf("failed to get GOARCH for build: %w", err)
+	}
+	return []string{
+		fmt.Sprintf("GOOS=%s", goos),
+		fmt.Sprintf("GOARCH=%s", goarch),
+	}, nil
+}
+
+func (r *Reloader) buildGOOS() (string, error) {
+	if r.isUsedDocker() {
+		goos, err := r.execCommandOnDockerContainer(
+			context.Background(),
+			r.host.Docker,
+			[]string{"go", "env", "GOOS"},
+		)
+		if err != nil {
+			return "", xerrors.Errorf("failed to get GOOS env on container: %w", err)
+		}
+		return goos, nil
+	}
+	return runtime.GOOS, nil
+}
+
+func (r *Reloader) buildGOARCH() (string, error) {
+	if r.isUsedDocker() {
+		goarch, err := r.execCommandOnDockerContainer(
+			context.Background(),
+			r.host.Docker,
+			[]string{"go", "env", "GOARCH"},
+		)
+		if err != nil {
+			return "", xerrors.Errorf("failed to get GOARCH env on container: %w", err)
+		}
+		return goarch, nil
+	}
+	return runtime.GOARCH, nil
+}
+
+func (r *Reloader) execRebirthOnDockerContainer(ctx context.Context, containerName string) error {
 	cli, err := client.NewEnvClient()
 	if err != nil {
 		return xerrors.Errorf("failed to create docker client: %w", err)
@@ -184,7 +250,7 @@ func (r *Reloader) execCommandOnDockerContainer(ctx context.Context, containerNa
 	cfg := types.ExecConfig{
 		AttachStdout: true,
 		AttachStderr: true,
-		Cmd:          command,
+		Cmd:          []string{dockerRebirthPath},
 	}
 	execResp, err := cli.ContainerExecCreate(ctx, containerName, cfg)
 	if err != nil {
@@ -196,14 +262,38 @@ func (r *Reloader) execCommandOnDockerContainer(ctx context.Context, containerNa
 		return xerrors.Errorf("failed to ContainerExecAttach: %w", err)
 	}
 	defer attachResp.Close()
+	if _, err = stdcopy.StdCopy(os.Stdout, os.Stderr, attachResp.Reader); err != nil {
+		return xerrors.Errorf("failed to copy stdout/stderr: %w", err)
+	}
+	return nil
+}
+
+func (r *Reloader) execCommandOnDockerContainer(ctx context.Context, containerName string, command []string) (string, error) {
+	cli, err := client.NewEnvClient()
+	if err != nil {
+		return "", xerrors.Errorf("failed to create docker client: %w", err)
+	}
+	cfg := types.ExecConfig{
+		AttachStdout: true,
+		AttachStderr: true,
+		Cmd:          command,
+	}
+	execResp, err := cli.ContainerExecCreate(ctx, containerName, cfg)
+	if err != nil {
+		return "", xerrors.Errorf("failed to ContainerExecCreate: %w", err)
+	}
+	execID := execResp.ID
+	attachResp, err := cli.ContainerExecAttach(ctx, execID, cfg)
+	if err != nil {
+		return "", xerrors.Errorf("failed to ContainerExecAttach: %w", err)
+	}
+	defer attachResp.Close()
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	if _, err = stdcopy.StdCopy(stdout, stderr, attachResp.Reader); err != nil {
-		return xerrors.Errorf("failed to copy stdout/stderr: %w", err)
+		return "", xerrors.Errorf("failed to copy stdout/stderr: %w", err)
 	}
-	fmt.Printf(stdout.String())
-	fmt.Printf(stderr.String())
-	return nil
+	return strings.TrimRight(stdout.String(), "\n"), nil
 }
 
 func (r *Reloader) sendReloadingSignal() error {
@@ -214,7 +304,7 @@ func (r *Reloader) sendReloadingSignal() error {
 		}
 		containerName := r.host.Docker
 		command := []string{"kill", "-HUP", fmt.Sprint(pid)}
-		if err := r.execCommandOnDockerContainer(context.Background(), containerName, command); err != nil {
+		if _, err := r.execCommandOnDockerContainer(context.Background(), containerName, command); err != nil {
 			return xerrors.Errorf("failed to exec command on docker container: %w", err)
 		}
 		return nil

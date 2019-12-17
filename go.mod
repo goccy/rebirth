@@ -10,6 +10,8 @@ require (
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.7 // indirect
 	github.com/goccy/go-yaml v1.1.5
+	github.com/labstack/echo v3.3.10+incompatible
+	github.com/labstack/gommon v0.3.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3 // indirect
 	golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898

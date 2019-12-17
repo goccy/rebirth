@@ -3,33 +3,53 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"os/signal"
 	"rebirth"
+	"syscall"
+
+	"golang.org/x/xerrors"
 )
 
-var (
-	isServerMode bool
-)
-
-func init() {
-	flag.BoolVar(&isServerMode, "server", false, "start as server mode")
-}
-
-func main() {
-	flag.Parse()
-
+func run() error {
 	cfg, err := rebirth.LoadConfig("rebirth.yml")
 	if err != nil {
-		panic(err)
+		return xerrors.Errorf("failed to load config: %w", err)
 	}
+
 	reloader := rebirth.NewReloader(cfg)
-	if !isServerMode {
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGQUIT)
+
+	go func() {
+		for {
+			<-sig
+			if err := reloader.Close(); err != nil {
+				log.Printf("%+v", err)
+			}
+			os.Exit(0)
+		}
+	}()
+
+	if reloader.IsEnabledReload() {
 		go rebirth.NewWatcher().Run(func() {
 			if err := reloader.Reload(); err != nil {
 				fmt.Println(err)
 			}
 		})
 	}
-	if err := reloader.Run(isServerMode); err != nil {
-		panic(err)
+	if err := reloader.Run(); err != nil {
+		return xerrors.Errorf("failed to running reloader: %w", err)
+	}
+	return nil
+}
+
+func main() {
+	flag.Parse()
+
+	if err := run(); err != nil {
+		log.Printf("%+v", err)
 	}
 }
