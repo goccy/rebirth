@@ -26,6 +26,7 @@ func run() error {
 	go func() {
 		for {
 			<-sig
+			fmt.Println("close...")
 			if err := reloader.Close(); err != nil {
 				log.Printf("%+v", err)
 			}
@@ -41,7 +42,7 @@ func run() error {
 		})
 	}
 	if err := reloader.Run(); err != nil {
-		return xerrors.Errorf("failed to running reloader: %w", err)
+		return xerrors.Errorf("failed to run reloader: %w", err)
 	}
 	return nil
 }

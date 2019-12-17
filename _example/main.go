@@ -1,5 +1,10 @@
 package main
 
+/*
+#cgo CXXFLAGS: -std=c++11
+#include <stdio.h>
+*/
+import "C"
 import (
 	"net/http"
 
