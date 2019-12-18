@@ -45,7 +45,7 @@ And write configuration file for `rebirth`
 
 ### rebirth.yml
 
-```
+```yaml
 host:
   docker: app # container_name in docker-compose.yml
 ```
