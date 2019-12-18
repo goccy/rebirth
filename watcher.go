@@ -2,6 +2,7 @@ package rebirth
 
 import (
 	"log"
+	"strings"
 
 	"golang.org/x/xerrors"
 	"gopkg.in/fsnotify.v1"
@@ -14,6 +15,16 @@ type Watcher struct {
 
 func NewWatcher() *Watcher {
 	return &Watcher{}
+}
+
+func (w *Watcher) addEventQueue(event fsnotify.Event) {
+	if strings.HasPrefix(event.Name, "#") {
+		return
+	}
+	if strings.HasPrefix(event.Name, ".") {
+		return
+	}
+	w.callback()
 }
 
 func (w *Watcher) Run(callback func()) error {
@@ -31,15 +42,14 @@ func (w *Watcher) Run(callback func()) error {
 		for {
 			select {
 			case event := <-watcher.Events:
-				if event.Op&fsnotify.Write == fsnotify.Write {
-					if err := w.notify(); err != nil {
-						log.Printf("%+v", err)
-					}
-				}
 				if event.Op&fsnotify.Create == fsnotify.Create {
-					if err := w.notify(); err != nil {
-						log.Printf("%+v", err)
-					}
+					w.addEventQueue(event)
+				} else if event.Op&fsnotify.Write == fsnotify.Write {
+					w.addEventQueue(event)
+				} else if event.Op&fsnotify.Write == fsnotify.Remove {
+					w.addEventQueue(event)
+				} else if event.Op&fsnotify.Write == fsnotify.Rename {
+					w.addEventQueue(event)
 				}
 			case err := <-watcher.Errors:
 				log.Printf("%+v", err)
@@ -54,9 +64,4 @@ func (w *Watcher) recoverRuntimeError() {
 	if err := recover(); err != nil {
 		log.Printf("%+v", err)
 	}
-}
-
-func (w *Watcher) notify() error {
-	w.callback()
-	return nil
 }

@@ -20,22 +20,34 @@ import (
 	"golang.org/x/xerrors"
 )
 
-const configDir = ".rebirth"
-
 var (
-	buildPath         = filepath.Join(configDir, "program")
-	pidPath           = filepath.Join(configDir, "server.pid")
-	dockerRebirthPath = filepath.Join(configDir, "__rebirth")
+	cwd               string
+	configDir         string
+	buildPath         string
+	pidPath           string
+	dockerRebirthPath string
 )
 
+func init() {
+	cwd, _ = os.Getwd()
+	configDir = ".rebirth"
+	buildPath = filepath.Join(cwd, configDir, "program")
+	pidPath = filepath.Join(configDir, "server.pid")
+	dockerRebirthPath = filepath.Join(configDir, "__rebirth")
+}
+
 type Reloader struct {
-	host *Host
-	cmd  *Command
+	host  *Host
+	cmd   *Command
+	build *Build
+	run   *Run
 }
 
 func NewReloader(cfg *Config) *Reloader {
 	return &Reloader{
-		host: cfg.Host,
+		host:  cfg.Host,
+		build: cfg.Build,
+		run:   cfg.Run,
 	}
 }
 
@@ -74,6 +86,7 @@ func (r *Reloader) IsEnabledReload() bool {
 }
 
 func (r *Reloader) Reload() error {
+	fmt.Println("Building....")
 	if err := r.xbuild(buildPath, "."); err != nil {
 		return xerrors.Errorf("failed to build on host: %w", err)
 	}
@@ -115,7 +128,7 @@ func (r *Reloader) rebirthDir() string {
 
 func (r *Reloader) xbuildRebirth() error {
 	cmdFile := filepath.Join(r.rebirthDir(), "cmd", "rebirth", "main.go")
-	if err := r.xbuild(dockerRebirthPath, cmdFile); err != nil {
+	if err := r.xbuildWithDir(filepath.Join(cwd, dockerRebirthPath), cmdFile, r.rebirthDir()); err != nil {
 		return xerrors.Errorf("failed to xbuild: %w", err)
 	}
 	return nil
@@ -162,17 +175,22 @@ func (r *Reloader) stopCurrentProcess() error {
 }
 
 func (r *Reloader) reload() (e error) {
-	fmt.Println("restarting...")
+	fmt.Println("Restarting...")
 	if err := r.stopCurrentProcess(); err != nil {
 		return xerrors.Errorf("failed to stop current process: %w", err)
 	}
 	execCmd := NewCommand(buildPath)
+	if r.run != nil {
+		env := []string{}
+		for k, v := range r.run.Env {
+			env = append(env, fmt.Sprintf("%s=%s", k, v))
+		}
+		execCmd.AddEnv(env)
+	}
 	r.cmd = execCmd
 	go func() {
 		if err := execCmd.Run(); err != nil {
 			fmt.Println(err)
-			execCmd.Stop()
-			r.cmd = nil
 		}
 	}()
 	return nil
@@ -188,6 +206,28 @@ func (r *Reloader) watchReloadSignal() {
 			go r.reload()
 		}
 	}()
+}
+
+func (r *Reloader) xbuildWithDir(target, source, dir string) error {
+	env, err := r.buildEnv()
+	if err != nil {
+		return xerrors.Errorf("failed to get build env: %w", err)
+	}
+	cmd := NewCommand(
+		"go",
+		"build",
+		"-o",
+		target,
+		"--ldflags",
+		`-linkmode external -extldflags "-static"`,
+		source,
+	)
+	cmd.SetDir(dir)
+	cmd.AddEnv(env)
+	if err := cmd.Run(); err != nil {
+		return xerrors.Errorf("failed to command: %w", err)
+	}
+	return nil
 }
 
 func (r *Reloader) xbuild(target, source string) error {
@@ -220,13 +260,24 @@ func (r *Reloader) buildEnv() ([]string, error) {
 	if err != nil {
 		return nil, xerrors.Errorf("failed to get GOARCH for build: %w", err)
 	}
-	return []string{
+	env := []string{
 		fmt.Sprintf("PATH=%s:%s", os.Getenv("PATH"), filepath.Join(r.rebirthDir(), "bin")),
 		"CGO_ENABLED=1",
-		fmt.Sprintf("CC=%s", r.buildCC()),
 		fmt.Sprintf("GOOS=%s", goos),
 		fmt.Sprintf("GOARCH=%s", goarch),
-	}, nil
+	}
+	if r.build != nil {
+		for k, v := range r.build.Env {
+			env = append(env, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+	if r.isUsedDocker() && runtime.GOOS == "darwin" {
+		env = append(env, []string{
+			"CC=x86_64-linux-musl-cc",
+			"CXX=x86_64-linux-musl-c++",
+		}...)
+	}
+	return env, nil
 }
 
 func (r *Reloader) buildGOOS() (string, error) {
@@ -257,13 +308,6 @@ func (r *Reloader) buildGOARCH() (string, error) {
 		return goarch, nil
 	}
 	return runtime.GOARCH, nil
-}
-
-func (r *Reloader) buildCC() string {
-	if r.isUsedDocker() {
-		return "x86_64-linux-musl-cc"
-	}
-	return "gcc"
 }
 
 func (r *Reloader) execRebirthOnDockerContainer(ctx context.Context, containerName string) error {

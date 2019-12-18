@@ -1,31 +1,55 @@
 package rebirth
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 
 	"golang.org/x/xerrors"
 )
 
 type Command struct {
-	cmd *exec.Cmd
+	cmd  *exec.Cmd
+	args []string
 }
 
 func NewCommand(args ...string) *Command {
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = os.Environ()
 	return &Command{
-		cmd: cmd,
+		cmd:  cmd,
+		args: args,
 	}
+}
+
+func (c *Command) SetDir(dir string) {
+	c.cmd.Dir = dir
 }
 
 func (c *Command) AddEnv(env []string) {
 	c.cmd.Env = append(c.cmd.Env, env...)
 }
 
+func (c *Command) String() string {
+	return fmt.Sprintf("%s; %s",
+		strings.Join(c.cmd.Env, " "),
+		strings.Join(c.args, " "),
+	)
+}
+
 func (c *Command) Stop() error {
+	if c == nil {
+		return nil
+	}
+	if c.cmd == nil {
+		return nil
+	}
+	if c.cmd.Process == nil {
+		return nil
+	}
 	if err := c.cmd.Process.Kill(); err != nil {
 		return xerrors.Errorf("failed to kill process: %w", err)
 	}
