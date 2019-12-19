@@ -26,6 +26,9 @@ var (
 	buildPath         string
 	pidPath           string
 	dockerRebirthPath string
+	binPath           string
+	srcPath           string
+	pkgPath           string
 )
 
 func init() {
@@ -34,6 +37,9 @@ func init() {
 	buildPath = filepath.Join(cwd, configDir, "program")
 	pidPath = filepath.Join(configDir, "server.pid")
 	dockerRebirthPath = filepath.Join(configDir, "__rebirth")
+	binPath = filepath.Join(configDir, "bin")
+	srcPath = filepath.Join(configDir, "src")
+	pkgPath = filepath.Join(configDir, "pkg")
 }
 
 type Reloader struct {
@@ -208,6 +214,14 @@ func (r *Reloader) watchReloadSignal() {
 	}()
 }
 
+func (r *Reloader) getModulePath() string {
+	if existsGoMod() {
+		file, _ := ioutil.ReadFile(goModPath)
+		return parseModulePath(file)
+	}
+	return ""
+}
+
 func (r *Reloader) xbuildWithDir(target, source, dir string) error {
 	env, err := r.buildEnv()
 	if err != nil {
@@ -235,6 +249,32 @@ func (r *Reloader) xbuild(target, source string) error {
 	if err != nil {
 		return xerrors.Errorf("failed to get build env: %w", err)
 	}
+	modpath := r.getModulePath()
+	if modpath == "" {
+		curpath, err := filepath.Abs(".")
+		if err != nil {
+			return xerrors.Errorf("failed to get abolute path from current dir: %w", err)
+		}
+		modpath = filepath.Base(curpath)
+	}
+	if err := os.MkdirAll(filepath.Join(srcPath, filepath.Dir(modpath)), 0755); err != nil {
+		return xerrors.Errorf("failed to create path to %s: %w", modpath, err)
+	}
+	symlinkPath := filepath.Join(srcPath, modpath)
+	if _, err := os.Stat(symlinkPath); err != nil {
+		oldpath, err := filepath.Abs(".")
+		if err != nil {
+			return xerrors.Errorf("failed to get abolute path from current dir: %w", err)
+		}
+		newpath, err := filepath.Abs(symlinkPath)
+		if err != nil {
+			return xerrors.Errorf("failed to get abolute path from %s: %w", symlinkPath, err)
+		}
+		if err := os.Symlink(oldpath, newpath); err != nil {
+			return xerrors.Errorf("failed to create symlink from %s to %s: %w", oldpath, newpath, err)
+		}
+	}
+
 	cmd := NewCommand(
 		"go",
 		"build",
@@ -244,7 +284,13 @@ func (r *Reloader) xbuild(target, source string) error {
 		`-linkmode external -extldflags "-static"`,
 		source,
 	)
+	gopath, err := filepath.Abs(configDir)
+	if err != nil {
+		return xerrors.Errorf("failed to get absolute path from %s: %w", configDir, err)
+	}
+	env = append(env, fmt.Sprintf("GOPATH=%s", gopath))
 	cmd.AddEnv(env)
+	cmd.SetDir(symlinkPath)
 	if err := cmd.Run(); err != nil {
 		return xerrors.Errorf("failed to command: %w", err)
 	}
@@ -376,6 +422,9 @@ func (r *Reloader) sendReloadingSignal() error {
 			return xerrors.Errorf("failed to exec command on docker container: %w", err)
 		}
 		return nil
+	}
+	if err := r.reload(); err != nil {
+		return xerrors.Errorf("failed to reload: %w", err)
 	}
 	return nil
 }

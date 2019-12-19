@@ -170,6 +170,7 @@ func (w *Watcher) Run(callback func()) error {
 		for {
 			switch w.watchState {
 			case idleState:
+				time.Sleep(10 * time.Millisecond)
 			case busyState:
 				func() {
 					ctx, cancel := context.WithTimeout(context.Background(), 2000*time.Millisecond)
