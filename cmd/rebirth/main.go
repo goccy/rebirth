@@ -35,11 +35,16 @@ func run() error {
 	}()
 
 	if reloader.IsEnabledReload() {
-		go rebirth.NewWatcher().Run(func() {
-			if err := reloader.Reload(); err != nil {
-				fmt.Println(err)
+		go func() {
+			if err := rebirth.NewWatcher(cfg).Run(func() {
+				if err := reloader.Reload(); err != nil {
+					fmt.Println(err)
+				}
+			}); err != nil {
+				log.Printf("%+v", err)
+				os.Exit(1)
 			}
-		})
+		}()
 	}
 	if err := reloader.Run(); err != nil {
 		return xerrors.Errorf("failed to run reloader: %w", err)

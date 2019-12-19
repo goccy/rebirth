@@ -2,7 +2,11 @@ package rebirth
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -24,20 +28,33 @@ type Watcher struct {
 	callback   func()
 	watchState state
 	mu         sync.Mutex
+	cfg        *Watch
 }
 
-func NewWatcher() *Watcher {
+const (
+	defaultRoot = "."
+)
+
+func NewWatcher(cfg *Config) *Watcher {
 	return &Watcher{
 		eventCh:    make(chan struct{}, 1),
 		watchState: idleState,
+		cfg:        cfg.Watch,
 	}
 }
 
 func (w *Watcher) addEvent(event fsnotify.Event) {
-	if strings.HasPrefix(event.Name, "#") {
+	name := filepath.Base(event.Name)
+	if strings.HasPrefix(name, "#") {
 		return
 	}
-	if strings.HasPrefix(event.Name, ".") {
+	if strings.HasPrefix(name, ".") {
+		return
+	}
+	if filepath.Ext(name) != ".go" {
+		return
+	}
+	if strings.HasSuffix(name, "_test.go") {
 		return
 	}
 
@@ -47,15 +64,86 @@ func (w *Watcher) addEvent(event fsnotify.Event) {
 	w.eventCh <- struct{}{}
 }
 
+func (w *Watcher) root() string {
+	if w.cfg == nil {
+		return defaultRoot
+	}
+	root := w.cfg.Root
+	if root == "" {
+		return defaultRoot
+	}
+	return root
+}
+
+func (w *Watcher) ignorePaths() []string {
+	root := w.root()
+	paths := []string{}
+	if w.cfg == nil {
+		return paths
+	}
+	for _, path := range w.cfg.Ignore {
+		if defaultRoot != "." {
+			paths = append(paths, filepath.Join(root, path))
+		} else {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+func (w *Watcher) watchPaths() []string {
+	ignorePaths := w.ignorePaths()
+	pathMap := map[string]struct{}{}
+	filepath.Walk(w.root(), func(path string, info os.FileInfo, err error) error {
+		if !info.IsDir() {
+			return nil
+		}
+		if strings.HasPrefix(path, ".") {
+			return nil
+		}
+		for _, p := range ignorePaths {
+			if strings.HasPrefix(path, p) {
+				return nil
+			}
+		}
+		pathMap[path] = struct{}{}
+		return nil
+	})
+	paths := []string{w.root()}
+	for path := range pathMap {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func (w *Watcher) fileNumForWatching(paths []string) int {
+	fileNum := 0
+	for _, path := range paths {
+		matches, _ := filepath.Glob(filepath.Join(path, "*"))
+		fileNum += len(matches)
+	}
+	return fileNum
+}
+
 func (w *Watcher) Run(callback func()) error {
 	w.callback = callback
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return xerrors.Errorf("failed to create fsnotify instance: %w", err)
 	}
-	path := "."
-	if err := watcher.Add(path); err != nil {
-		return xerrors.Errorf("failed to add path %s: %w", path, err)
+	watchPaths := w.watchPaths()
+	fileNum := w.fileNumForWatching(watchPaths)
+	for _, path := range watchPaths {
+		fmt.Printf("Watching %s\n", path)
+		if err := watcher.Add(path); err != nil {
+			return xerrors.Errorf(
+				"failed to add path %s. current total watching file number is %d: %w",
+				path,
+				fileNum,
+				err,
+			)
+		}
 	}
 	go func() {
 		defer w.recoverRuntimeError()

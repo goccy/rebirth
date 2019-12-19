@@ -11,6 +11,7 @@ type Config struct {
 	Host  *Host  `yaml:"host,omitempty"`
 	Build *Build `yaml:"build,omitempty"`
 	Run   *Run   `yaml:"run,omitempty"`
+	Watch *Watch `yaml:"watch,omitempty"`
 }
 
 type Host struct {
@@ -23,6 +24,11 @@ type Build struct {
 
 type Run struct {
 	Env map[string]string `yaml:"env,omitempty"`
+}
+
+type Watch struct {
+	Root   string   `yaml:"root,omitempty"`
+	Ignore []string `yaml:"ignore,omitempty"`
 }
 
 func LoadConfig(confPath string) (*Config, error) {
