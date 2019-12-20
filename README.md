@@ -9,6 +9,8 @@ under development
 
 - Better features than github.com/pilu/fresh
 - Supports cross compile and live reloading on host OS for `docker` users ( **Very Fast** for `Docker for Mac` user )
+- Supports cross compile by cgo ( C/C++ ) ( currently, works on macOS ( and target architecture is `amd64` ) only )
+- Supports helper commands for `go run` `go test` `go build`
 
 # Synopsis
 
@@ -114,5 +116,49 @@ $ rebirth
 # build for docker container's architecture on macOS (e.g. GOOS=linux GOARCH=amd64
 # execute built binary on target container
 ```
+
+## Helper commands
+
+```bash
+Usage:
+  rebirth [OPTIONS] <command>
+
+Help Options:
+  -h, --help  Show this help message
+
+Available commands:
+  build  execute 'go build' command
+  init   create rebirth.yml for configuration
+  run    execute 'go run'   command
+  test   execute 'go test'  command
+```
+
+### `rebirth build`
+
+Help cross compile your go script
+
+```bash
+$ rebirth build -o app script/hoge.go
+```
+
+### `rebirth test`
+
+Help cross compile for `go test`
+
+```bash
+$ rebirth test -v ./ -run Hoge
+```
+
+### `rebirth run`
+
+Help cross compile for `go run`
+
+```bash
+$ rebirth run script/hoge.go
+```
+
+
+
+
 
 
