@@ -7,11 +7,59 @@ under development
 
 # Features
 
-- Supports cross compile and hot reloading on macos for `Docker for Mac` users
+- Better features than github.com/pilu/fresh
+- Supports cross compile and live reloading on host OS for `docker` users ( **Very Fast** for `Docker for Mac` user )
 
 # Synopsis
 
-## In case of running Web Apps with Docker for Mac
+## Settings
+
+`rebirth` needs configuration file ( `rebirth.yml` ) to running .
+`rebirth init` create it .
+
+`rebirth.yml` example is the following.
+
+```yaml
+host:
+  docker: container_name
+build:
+  env:
+    CGO_LDFLAGS: /usr/local/lib/libz.a
+run:
+  env:
+    RUNTIME_ENV: "fuga"
+watch:
+  root: . # root directory for watching ( default: . )
+  ignore:
+    - vendor
+```
+
+- `host` : specify host information for running to an application ( currently, supports `docker` only )
+- `build` : specify ENV variables for building
+- `run` : specify ENV variables for running
+- `watch` : specify `root` directory or `ignore` directories for watching go file
+
+## In case of running on localhost
+
+### 1. Install `rebirth` CLI
+
+```bash
+$ go get -u github.com/goccy/rebirth/cmd/rebirth
+```
+
+### 2. Create `rebirth.yml`
+
+```bash
+$ rebirth init
+```
+
+### 3. Run `rebirth`
+
+```bash
+rebirth
+```
+
+## In case of running with Docker for Mac
 
 Example tree
 
@@ -24,6 +72,14 @@ Example tree
 
 `main.go` is your web application's source.
 
+### 1. Install `rebirth` CLI
+
+```bash
+$ go get -u github.com/goccy/rebirth/cmd/rebirth
+```
+
+### 2. Write settings
+
 ### docker-compose.yml
 
 ```yaml
@@ -31,7 +87,7 @@ version: '2'
 services:
   app:
     image: golang:1.13.5
-    container_name: app
+    container_name: rebirth_app
     volumes:
       - '.:/go/src/app'
     working_dir: /go/src/app
@@ -41,22 +97,14 @@ services:
       tail -f /dev/null
 ```
 
-And write configuration file for `rebirth`
-
 ### rebirth.yml
 
 ```yaml
 host:
-  docker: app # container_name in docker-compose.yml
+  docker: rebirth_app # container_name in docker-compose.yml
 ```
 
-Then, install `rebirth` CLI
-
-```bash
-$ go get -u github.com/goccy/rebirth/cmd/rebirth
-```
-
-Finnaly, run `rebirth`
+### 3. Run `rebirth`
 
 ```bash
 $ rebirth
