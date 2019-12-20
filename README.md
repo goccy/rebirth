@@ -165,7 +165,7 @@ $ rebirth run script/hoge.go
 <img width="600px" src="https://user-images.githubusercontent.com/209884/71261949-f7996500-2381-11ea-9b18-a8e4dfd49c41.png"></img>
 
 1. install `rebirth` CLI ( `go get -u github.com/goccy/rebirth/cmd/rebirth` )
-2. cross compile `rebirth` for Linux ( GOOS=linux, GOARCH=amd64 ) and put to `.rebirth` directory as `__rebirth`
+2. run `rebirth` and it cross compile myself for Linux ( GOOS=linux, GOARCH=amd64 ) and put it to `.rebirth` directory as `__rebirth`
 3. copy `.rebirth/__rebirth` to the container ( `.rebirth` directory is mounted on the container )
 4. watch `main.go` ( by [fsnotify](https://github.com/fsnotify/fsnotify) )
 
