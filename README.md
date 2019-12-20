@@ -158,6 +158,39 @@ $ rebirth run script/hoge.go
 ```
 
 
+# How it Works
+
+`~/work/app` directory is mounted on the container as `/go/src/app`
+
+<img width="600px" src="https://user-images.githubusercontent.com/209884/71261949-f7996500-2381-11ea-9b18-a8e4dfd49c41.png"></img>
+
+1. install `rebirth` CLI ( `go get -u github.com/goccy/rebirth/cmd/rebirth` )
+2. cross compile `rebirth` for Linux ( GOOS=linux, GOARCH=amd64 ) and put to `.rebirth` directory as `__rebirth`
+3. copy `.rebirth/__rebirth` to the container ( `.rebirth` directory is mounted on the container )
+4. watch `main.go` ( by [fsnotify](https://github.com/fsnotify/fsnotify) )
+
+<img width="500px" src="https://user-images.githubusercontent.com/209884/71261979-05e78100-2382-11ea-8955-91e5b01f0234.png"></img>
+
+5. cross compile `main.go` for Linux and put to `.rebirth` directory as `program`
+6. copy `.rebirth/program` to the container
+
+<img width="600px" src="https://user-images.githubusercontent.com/209884/71261987-08e27180-2382-11ea-93d3-4117d0dd2999.png"></img>
+
+7. run `__rebirth` on the container
+8. `__rebirth` executes `program` 
+9. edit `main.go`
+10. `rebirth` detects file changed event
+
+<img width="500px" src="https://user-images.githubusercontent.com/209884/71261992-0b44cb80-2382-11ea-9e1d-a2c44f0262ae.png"></img>
+
+11. cross compile `main.go` for Linux and put to `.rebirth` directory as `program`
+12. copy `.rebirth/program` to the container
+13. `rebirth` send signal to `__rebirth` for reloading ( `SIGHUP` )
+14. `__rebirth` kill the current application and execute `program` as a new application
+
+# License
+
+MIT
 
 
 
