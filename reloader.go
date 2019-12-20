@@ -57,6 +57,83 @@ func NewReloader(cfg *Config) *Reloader {
 	}
 }
 
+func (r *Reloader) Test(args []string) error {
+	if err := r.xtest(args); err != nil {
+		return xerrors.Errorf("failed to xtest: %w", err)
+	}
+	return nil
+}
+
+func (r *Reloader) Build(args []string) error {
+	env, err := r.buildEnv()
+	if err != nil {
+		return xerrors.Errorf("failed to get build env: %w", err)
+	}
+	symlinkPath, err := r.getOrCreateSymlink()
+	if err != nil {
+		return xerrors.Errorf("failed to get symlink path: %w", err)
+	}
+	buildArgs := []string{
+		"go",
+		"build",
+		"--ldflags",
+		`-linkmode external -extldflags "-static"`,
+	}
+	buildArgs = append(buildArgs, args...)
+	cmd := NewCommand(buildArgs...)
+	gopath, err := filepath.Abs(configDir)
+	if err != nil {
+		return xerrors.Errorf("failed to get absolute path from %s: %w", configDir, err)
+	}
+	env = append(env, fmt.Sprintf("GOPATH=%s", gopath))
+	cmd.AddEnv(env)
+	cmd.SetDir(symlinkPath)
+	if err := cmd.Run(); err != nil {
+		return xerrors.Errorf("failed to command: %w", err)
+	}
+	return nil
+}
+
+func (r *Reloader) GoRun(args []string) error {
+	if r.isUsedDocker() && !r.isOnDockerContainer() {
+		tmpfile, err := ioutil.TempFile(configDir, "script")
+		if err != nil {
+			return xerrors.Errorf("failed to create temporary file: %w", err)
+		}
+		defer os.Remove(tmpfile.Name())
+		buildArgs := []string{
+			"go",
+			"build",
+			"-o",
+			tmpfile.Name(),
+			"--ldflags",
+			`-linkmode external -extldflags "-static"`,
+		}
+		buildArgs = append(buildArgs, args...)
+		if err := r.execCommand(buildArgs...); err != nil {
+			return xerrors.Errorf("failed to execute command: %w", err)
+		}
+		containerName := r.host.Docker
+		cmd := []string{tmpfile.Name()}
+		cmd = append(cmd, args...)
+		if err := r.execCommandOnDockerContainerWithStd(context.Background(), containerName, cmd); err != nil {
+			return xerrors.Errorf("failed to exec command on docker container: %w", err)
+		}
+		return nil
+	}
+	cmdArgs := []string{
+		"go",
+		"run",
+		"--ldflags",
+		`-linkmode external -extldflags "-static"`,
+	}
+	cmdArgs = append(cmdArgs, args...)
+	if err := r.execCommand(cmdArgs...); err != nil {
+		return xerrors.Errorf("failed to execute command: %w", err)
+	}
+	return nil
+}
+
 func (r *Reloader) Run() error {
 	if !r.IsEnabledReload() {
 		if err := r.writePID(); err != nil {
@@ -244,37 +321,113 @@ func (r *Reloader) xbuildWithDir(target, source, dir string) error {
 	return nil
 }
 
-func (r *Reloader) xbuild(target, source string) error {
-	env, err := r.buildEnv()
-	if err != nil {
-		return xerrors.Errorf("failed to get build env: %w", err)
-	}
+func (r *Reloader) getOrCreateSymlink() (string, error) {
 	modpath := r.getModulePath()
 	if modpath == "" {
 		curpath, err := filepath.Abs(".")
 		if err != nil {
-			return xerrors.Errorf("failed to get abolute path from current dir: %w", err)
+			return "", xerrors.Errorf("failed to get abolute path from current dir: %w", err)
 		}
 		modpath = filepath.Base(curpath)
 	}
 	if err := os.MkdirAll(filepath.Join(srcPath, filepath.Dir(modpath)), 0755); err != nil {
-		return xerrors.Errorf("failed to create path to %s: %w", modpath, err)
+		return "", xerrors.Errorf("failed to create path to %s: %w", modpath, err)
 	}
 	symlinkPath := filepath.Join(srcPath, modpath)
 	if _, err := os.Stat(symlinkPath); err != nil {
 		oldpath, err := filepath.Abs(".")
 		if err != nil {
-			return xerrors.Errorf("failed to get abolute path from current dir: %w", err)
+			return "", xerrors.Errorf("failed to get abolute path from current dir: %w", err)
 		}
 		newpath, err := filepath.Abs(symlinkPath)
 		if err != nil {
-			return xerrors.Errorf("failed to get abolute path from %s: %w", symlinkPath, err)
+			return "", xerrors.Errorf("failed to get abolute path from %s: %w", symlinkPath, err)
 		}
 		if err := os.Symlink(oldpath, newpath); err != nil {
-			return xerrors.Errorf("failed to create symlink from %s to %s: %w", oldpath, newpath, err)
+			return "", xerrors.Errorf("failed to create symlink from %s to %s: %w", oldpath, newpath, err)
 		}
 	}
+	return symlinkPath, nil
+}
 
+func (r *Reloader) execCommand(args ...string) error {
+	env, err := r.buildEnv()
+	if err != nil {
+		return xerrors.Errorf("failed to get build env: %w", err)
+	}
+	symlinkPath, err := r.getOrCreateSymlink()
+	if err != nil {
+		return xerrors.Errorf("failed to get symlink path: %w", err)
+	}
+	cmd := NewCommand(args...)
+	gopath, err := filepath.Abs(configDir)
+	if err != nil {
+		return xerrors.Errorf("failed to get absolute path from %s: %w", configDir, err)
+	}
+	env = append(env, fmt.Sprintf("GOPATH=%s", gopath))
+	cmd.AddEnv(env)
+	cmd.SetDir(symlinkPath)
+	if err := cmd.Run(); err != nil {
+		return xerrors.Errorf("failed to command: %w", err)
+	}
+	return nil
+}
+
+func (r *Reloader) xtest(args []string) error {
+	if r.isUsedDocker() && !r.isOnDockerContainer() {
+		cmdArgs := []string{
+			"go",
+			"test",
+			"-c",
+			"-o",
+			filepath.Join(configDir, "app.test"),
+			"--ldflags",
+			`-linkmode external -extldflags "-static"`,
+		}
+		cmdArgs = append(cmdArgs, args...)
+		if err := r.execCommand(cmdArgs...); err != nil {
+			return xerrors.Errorf("failed to execute command: %w", err)
+		}
+		containerName := r.host.Docker
+		cmd := []string{filepath.Join(configDir, "app.test")}
+		testArgs := []string{}
+		for idx, arg := range args {
+			switch arg {
+			case "-v":
+				testArgs = append(testArgs, "-test.v")
+			case "-run":
+				testArgs = append(testArgs, "-test.run", args[idx+1])
+			}
+		}
+		cmd = append(cmd, testArgs...)
+		fmt.Println("cmd = ", cmd)
+		if err := r.execCommandOnDockerContainerWithStd(context.Background(), containerName, cmd); err != nil {
+			return xerrors.Errorf("failed to exec command on docker container: %w", err)
+		}
+		return nil
+	}
+	cmdArgs := []string{
+		"go",
+		"test",
+		"--ldflags",
+		`-linkmode external -extldflags "-static"`,
+	}
+	cmdArgs = append(cmdArgs, args...)
+	if err := r.execCommand(cmdArgs...); err != nil {
+		return xerrors.Errorf("failed to execute command: %w", err)
+	}
+	return nil
+}
+
+func (r *Reloader) xbuild(target, source string) error {
+	env, err := r.buildEnv()
+	if err != nil {
+		return xerrors.Errorf("failed to get build env: %w", err)
+	}
+	symlinkPath, err := r.getOrCreateSymlink()
+	if err != nil {
+		return xerrors.Errorf("failed to get symlink path: %w", err)
+	}
 	cmd := NewCommand(
 		"go",
 		"build",
@@ -357,6 +510,13 @@ func (r *Reloader) buildGOARCH() (string, error) {
 }
 
 func (r *Reloader) execRebirthOnDockerContainer(ctx context.Context, containerName string) error {
+	if err := r.execCommandOnDockerContainerWithStd(ctx, containerName, []string{dockerRebirthPath}); err != nil {
+		return xerrors.Errorf("failed to execute command on docker container: %w", err)
+	}
+	return nil
+}
+
+func (r *Reloader) execCommandOnDockerContainerWithStd(ctx context.Context, containerName string, command []string) error {
 	cli, err := client.NewEnvClient()
 	if err != nil {
 		return xerrors.Errorf("failed to create docker client: %w", err)
@@ -364,7 +524,7 @@ func (r *Reloader) execRebirthOnDockerContainer(ctx context.Context, containerNa
 	cfg := types.ExecConfig{
 		AttachStdout: true,
 		AttachStderr: true,
-		Cmd:          []string{dockerRebirthPath},
+		Cmd:          command,
 	}
 	execResp, err := cli.ContainerExecCreate(ctx, containerName, cfg)
 	if err != nil {

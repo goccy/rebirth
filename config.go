@@ -2,6 +2,7 @@ package rebirth
 
 import (
 	"io/ioutil"
+	"os"
 
 	"github.com/goccy/go-yaml"
 	"golang.org/x/xerrors"
@@ -41,4 +42,9 @@ func LoadConfig(confPath string) (*Config, error) {
 		return nil, xerrors.New(yaml.FormatError(err, true, true))
 	}
 	return &cfg, nil
+}
+
+func ExistsConfig() bool {
+	_, err := os.Stat(configDir)
+	return err == nil
 }

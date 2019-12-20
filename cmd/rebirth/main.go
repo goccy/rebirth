@@ -1,18 +1,85 @@
 package main
 
 import (
-	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
 	"rebirth"
 	"syscall"
 
+	"github.com/jessevdk/go-flags"
 	"golang.org/x/xerrors"
 )
 
-func run() error {
+type Option struct {
+	Watch WatchCommand `description:"" command:"watch" hidden:"true"`
+	Init  InitCommand  `description:"create rebirth.yml for configuration" command:"init"`
+	Run   RunCommand   `description:"execute 'go run'   command"           command:"run"`
+	Test  TestCommand  `description:"execute 'go test'  command"           command:"test"`
+	Build BuildCommand `description:"execute 'go build' command"           command:"build"`
+}
+
+type InitCommand struct{}
+type RunCommand struct{}
+type TestCommand struct{}
+type BuildCommand struct{}
+type WatchCommand struct{}
+
+func (cmd *InitCommand) Execute(args []string) error {
+	if rebirth.ExistsConfig() {
+		return xerrors.New("already exists rebirth.yml")
+	}
+	if err := ioutil.WriteFile("rebirth.yml", []byte{}, 0644); err != nil {
+		return xerrors.Errorf("failed to create rebirth.yml: %w", err)
+	}
+	return nil
+}
+
+func (cmd *RunCommand) Execute(args []string) error {
+	if !rebirth.ExistsConfig() {
+		return xerrors.New("`rebirth init` must be executed before `rebirth run`")
+	}
+	cfg, err := rebirth.LoadConfig("rebirth.yml")
+	if err != nil {
+		return xerrors.Errorf("failed to load config: %w", err)
+	}
+	if err := rebirth.NewReloader(cfg).GoRun(args); err != nil {
+		return xerrors.Errorf("failed to run: %w", err)
+	}
+	return nil
+}
+
+func (cmd *TestCommand) Execute(args []string) error {
+	if !rebirth.ExistsConfig() {
+		return xerrors.New("`rebirth init` must be executed before `rebirth test`")
+	}
+	cfg, err := rebirth.LoadConfig("rebirth.yml")
+	if err != nil {
+		return xerrors.Errorf("failed to load config: %w", err)
+	}
+	if err := rebirth.NewReloader(cfg).Test(args); err != nil {
+		return xerrors.Errorf("failed to test: %w", err)
+	}
+	return nil
+}
+
+func (cmd *BuildCommand) Execute(args []string) error {
+	if !rebirth.ExistsConfig() {
+		return xerrors.New("`rebirth init` must be executed before `rebirth build`")
+	}
+	cfg, err := rebirth.LoadConfig("rebirth.yml")
+	if err != nil {
+		return xerrors.Errorf("failed to load config: %w", err)
+	}
+	if err := rebirth.NewReloader(cfg).Build(args); err != nil {
+		return xerrors.Errorf("failed to build: %w", err)
+	}
+	return nil
+}
+
+func (cmd *WatchCommand) run() error {
 	cfg, err := rebirth.LoadConfig("rebirth.yml")
 	if err != nil {
 		return xerrors.Errorf("failed to load config: %w", err)
@@ -52,10 +119,27 @@ func run() error {
 	return nil
 }
 
-func main() {
-	flag.Parse()
-
-	if err := run(); err != nil {
+func (cmd *WatchCommand) Execute(args []string) error {
+	if err := cmd.run(); err != nil {
 		log.Printf("%+v", err)
 	}
+	return nil
+}
+
+var opts Option
+
+func main() {
+	args := []string{os.Args[0]}
+	if len(os.Args) == 1 {
+		args = append(args, "watch")
+	} else {
+		args = append(args, os.Args[1])
+	}
+	args = append(args, "--")
+	if len(os.Args) > 2 {
+		args = append(args, os.Args[2:]...)
+	}
+	os.Args = args
+	parser := flags.NewParser(&opts, flags.Default)
+	parser.Parse()
 }

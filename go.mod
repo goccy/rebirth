@@ -10,6 +10,7 @@ require (
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.7 // indirect
 	github.com/goccy/go-yaml v1.1.5
+	github.com/jessevdk/go-flags v1.4.0 // indirect
 	github.com/labstack/echo v3.3.10+incompatible
 	github.com/labstack/gommon v0.3.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
