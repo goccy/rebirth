@@ -360,9 +360,7 @@ func (c *GoCommand) buildEnv() ([]string, error) {
 		fmt.Sprintf("GOOS=%s", goos),
 		fmt.Sprintf("GOARCH=%s", goarch),
 	}
-	for k, v := range c.extEnv {
-		env = append(env, fmt.Sprintf("%s=%s", k, v))
-	}
+	env = append(env, c.extEnv...)
 	if c.isCrossBuild && runtime.GOOS == "darwin" {
 		env = append(env, []string{
 			"CC=x86_64-linux-musl-cc",
