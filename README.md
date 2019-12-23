@@ -1,10 +1,6 @@
 # rebirth
 Supports live reloading for Go
 
-# Status
-
-under development
-
 # Features
 
 - Better features than github.com/pilu/fresh
