@@ -170,7 +170,7 @@ $ rebirth run script/hoge.go
 5. cross compile `main.go` for Linux and put to `.rebirth` directory as `program`
 6. copy `.rebirth/program` to the container
 
-<img width="600px" src="https://user-images.githubusercontent.com/209884/71261987-08e27180-2382-11ea-93d3-4117d0dd2999.png"></img>
+<img width="600px" src="https://user-images.githubusercontent.com/209884/71357811-3883ba80-25ca-11ea-9e92-b4cec89e9c95.png"></img>
 
 7. run `__rebirth` on the container
 8. `__rebirth` executes `program` 
