@@ -45,8 +45,19 @@ func (cmd *RunCommand) Execute(args []string) error {
 	if err != nil {
 		return xerrors.Errorf("failed to load config: %w", err)
 	}
-	if err := rebirth.NewReloader(cfg).GoRun(args); err != nil {
-		return xerrors.Errorf("failed to run: %w", err)
+	gocmd := rebirth.NewGoCommand()
+	if cfg.Run != nil {
+		env := []string{}
+		for k, v := range cfg.Run.Env {
+			env = append(env, fmt.Sprintf("%s=%s", k, v))
+		}
+		gocmd.AddEnv(env)
+	}
+	if cfg.Host != nil && cfg.Host.Docker != "" {
+		gocmd.EnableCrossBuild(cfg.Host.Docker)
+	}
+	if err := gocmd.Run(args...); err != nil {
+		return xerrors.Errorf("failed to test: %w", err)
 	}
 	return nil
 }
@@ -59,7 +70,18 @@ func (cmd *TestCommand) Execute(args []string) error {
 	if err != nil {
 		return xerrors.Errorf("failed to load config: %w", err)
 	}
-	if err := rebirth.NewReloader(cfg).Test(args); err != nil {
+	gocmd := rebirth.NewGoCommand()
+	if cfg.Build != nil {
+		env := []string{}
+		for k, v := range cfg.Build.Env {
+			env = append(env, fmt.Sprintf("%s=%s", k, v))
+		}
+		gocmd.AddEnv(env)
+	}
+	if cfg.Host != nil && cfg.Host.Docker != "" {
+		gocmd.EnableCrossBuild(cfg.Host.Docker)
+	}
+	if err := gocmd.Test(args...); err != nil {
 		return xerrors.Errorf("failed to test: %w", err)
 	}
 	return nil
@@ -73,7 +95,18 @@ func (cmd *BuildCommand) Execute(args []string) error {
 	if err != nil {
 		return xerrors.Errorf("failed to load config: %w", err)
 	}
-	if err := rebirth.NewReloader(cfg).Build(args); err != nil {
+	gocmd := rebirth.NewGoCommand()
+	if cfg.Build != nil {
+		env := []string{}
+		for k, v := range cfg.Build.Env {
+			env = append(env, fmt.Sprintf("%s=%s", k, v))
+		}
+		gocmd.AddEnv(env)
+	}
+	if cfg.Host != nil && cfg.Host.Docker != "" {
+		gocmd.EnableCrossBuild(cfg.Host.Docker)
+	}
+	if err := gocmd.Build(args...); err != nil {
 		return xerrors.Errorf("failed to build: %w", err)
 	}
 	return nil
