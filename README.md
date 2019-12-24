@@ -44,7 +44,7 @@ watch:
 ### 1. Install `rebirth` CLI
 
 ```bash
-$ go get -u github.com/goccy/rebirth/cmd/rebirth
+$ GO111MODULE=on go get -u github.com/goccy/rebirth/cmd/rebirth
 ```
 
 ### 2. Create `rebirth.yml`
