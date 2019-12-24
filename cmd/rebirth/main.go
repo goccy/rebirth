@@ -6,9 +6,9 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"rebirth"
 	"syscall"
 
+	"github.com/goccy/rebirth"
 	"github.com/jessevdk/go-flags"
 	"golang.org/x/xerrors"
 )

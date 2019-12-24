@@ -1,4 +1,4 @@
-module rebirth
+module github.com/goccy/rebirth
 
 go 1.13
 
