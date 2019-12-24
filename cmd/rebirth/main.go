@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/goccy/rebirth"
+	"github.com/goccy/rebirth/internal/errors"
 	"github.com/jessevdk/go-flags"
 	"golang.org/x/xerrors"
 )
@@ -154,7 +155,10 @@ func (cmd *WatchCommand) run() error {
 
 func (cmd *WatchCommand) Execute(args []string) error {
 	if err := cmd.run(); err != nil {
-		log.Printf("%+v", err)
+		if xerrors.Is(err, errors.ErrCrossCompiler) {
+			return errors.ErrCrossCompiler
+		}
+		log.Printf("%+v", xerrors.Unwrap(err))
 	}
 	return nil
 }

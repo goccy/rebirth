@@ -16,6 +16,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/goccy/rebirth/internal/errors"
 	"golang.org/x/xerrors"
 )
 
@@ -336,15 +337,6 @@ func (c *GoCommand) run(args ...string) error {
 	return nil
 }
 
-func (c *GoCommand) rebirthInstallDir() string {
-	_, file, _, _ := runtime.Caller(0)
-	return filepath.Dir(file)
-}
-
-func (c *GoCommand) rebirthBinDir() string {
-	return filepath.Join(c.rebirthInstallDir(), "bin")
-}
-
 func (c *GoCommand) buildEnv() ([]string, error) {
 	goos, err := c.buildGOOS()
 	if err != nil {
@@ -355,13 +347,15 @@ func (c *GoCommand) buildEnv() ([]string, error) {
 		return nil, xerrors.Errorf("failed to get GOARCH for build: %w", err)
 	}
 	env := []string{
-		fmt.Sprintf("PATH=%s:%s", os.Getenv("PATH"), c.rebirthBinDir()),
 		"CGO_ENABLED=1",
 		fmt.Sprintf("GOOS=%s", goos),
 		fmt.Sprintf("GOARCH=%s", goarch),
 	}
 	env = append(env, c.extEnv...)
 	if c.isCrossBuild && runtime.GOOS == "darwin" {
+		if _, err := exec.LookPath("x86_64-linux-musl-cc"); err != nil {
+			return nil, errors.ErrCrossCompiler
+		}
 		env = append(env, []string{
 			"CC=x86_64-linux-musl-cc",
 			"CXX=x86_64-linux-musl-c++",
