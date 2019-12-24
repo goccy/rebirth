@@ -78,7 +78,13 @@ Example tree
 $ GO111MODULE=on go get -u github.com/goccy/rebirth/cmd/rebirth
 ```
 
-### 2. Write settings
+### 2. Install cross compiler for cgo
+
+```bash
+$ brew install FiloSottile/musl-cross/musl-cross
+```
+
+### 3. Write settings
 
 ### docker-compose.yml
 
@@ -104,7 +110,7 @@ host:
   docker: rebirth_app # container_name in docker-compose.yml
 ```
 
-### 3. Run `rebirth`
+### 4. Run `rebirth`
 
 ```bash
 $ rebirth
