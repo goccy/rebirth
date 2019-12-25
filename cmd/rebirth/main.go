@@ -50,7 +50,7 @@ func (cmd *RunCommand) Execute(args []string) error {
 	if cfg.Run != nil {
 		env := []string{}
 		for k, v := range cfg.Run.Env {
-			env = append(env, fmt.Sprintf("%s=%s", k, v))
+			env = append(env, fmt.Sprintf("%s=%s", k, rebirth.ExpandPath(v)))
 		}
 		gocmd.AddEnv(env)
 	}
@@ -75,7 +75,7 @@ func (cmd *TestCommand) Execute(args []string) error {
 	if cfg.Build != nil {
 		env := []string{}
 		for k, v := range cfg.Build.Env {
-			env = append(env, fmt.Sprintf("%s=%s", k, v))
+			env = append(env, fmt.Sprintf("%s=%s", k, rebirth.ExpandPath(v)))
 		}
 		gocmd.AddEnv(env)
 	}
@@ -100,7 +100,7 @@ func (cmd *BuildCommand) Execute(args []string) error {
 	if cfg.Build != nil {
 		env := []string{}
 		for k, v := range cfg.Build.Env {
-			env = append(env, fmt.Sprintf("%s=%s", k, v))
+			env = append(env, fmt.Sprintf("%s=%s", k, rebirth.ExpandPath(v)))
 		}
 		gocmd.AddEnv(env)
 	}

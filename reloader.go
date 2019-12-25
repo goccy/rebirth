@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -195,31 +194,6 @@ func (r *Reloader) rebirthDir() string {
 	return filepath.Dir(file)
 }
 
-func (r *Reloader) expandPath(path string) string {
-	if strings.HasPrefix(path, "./") {
-		absPath, err := filepath.Abs(path)
-		if err == nil {
-			return absPath
-		}
-		return path
-	}
-	if strings.HasPrefix(path, "-I./") {
-		absPath, err := filepath.Abs(path[2:])
-		if err == nil {
-			return fmt.Sprintf("-I%s", absPath)
-		}
-		return fmt.Sprintf("-I%s", path)
-	}
-	if strings.HasPrefix(path, "-L./") {
-		absPath, err := filepath.Abs(path[2:])
-		if err == nil {
-			return fmt.Sprintf("-L%s", absPath)
-		}
-		return fmt.Sprintf("-L%s", path)
-	}
-	return path
-}
-
 func (r *Reloader) xbuildRebirth() error {
 	cmdFile := filepath.Join(r.rebirthDir(), "cmd", "rebirth", "main.go")
 	gocmd := NewGoCommand()
@@ -228,8 +202,7 @@ func (r *Reloader) xbuildRebirth() error {
 	if r.build != nil {
 		env := []string{}
 		for k, v := range r.build.Env {
-			v = r.expandPath(v)
-			env = append(env, fmt.Sprintf("%s=%s", k, v))
+			env = append(env, fmt.Sprintf("%s=%s", k, ExpandPath(v)))
 		}
 		gocmd.AddEnv(env)
 	}
@@ -244,8 +217,7 @@ func (r *Reloader) xbuild(target, source string) error {
 	if r.build != nil {
 		env := []string{}
 		for k, v := range r.build.Env {
-			v = r.expandPath(v)
-			env = append(env, fmt.Sprintf("%s=%s", k, v))
+			env = append(env, fmt.Sprintf("%s=%s", k, ExpandPath(v)))
 		}
 		gocmd.AddEnv(env)
 	}
