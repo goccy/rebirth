@@ -94,11 +94,15 @@ func (c *Command) RunWithStdoutPipeOnly() error {
 	if err != nil {
 		return xerrors.Errorf("failed to pipe stdout: %w", err)
 	}
-	// TODO: if try to capture by StderrPipe(), occurred unexpected hang
+	stderr, err := c.cmd.StderrPipe()
+	if err != nil {
+		return xerrors.Errorf("failed to pipe stderr: %w", err)
+	}
 	if err := c.cmd.Start(); err != nil {
 		return xerrors.Errorf("failed to run build command: %w", err)
 	}
-	io.Copy(os.Stdout, stdout)
+	go io.Copy(os.Stdout, stdout)
+	go io.Copy(os.Stderr, stderr)
 	if err := c.cmd.Wait(); err != nil {
 		return err
 	}
