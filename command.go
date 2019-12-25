@@ -89,7 +89,7 @@ func (c *Command) Run() error {
 	return nil
 }
 
-func (c *Command) RunAsync() error {
+func (c *Command) RunWithStdoutPipeOnly() error {
 	stdout, err := c.cmd.StdoutPipe()
 	if err != nil {
 		return xerrors.Errorf("failed to pipe stdout: %w", err)
@@ -99,6 +99,9 @@ func (c *Command) RunAsync() error {
 		return xerrors.Errorf("failed to run build command: %w", err)
 	}
 	io.Copy(os.Stdout, stdout)
+	if err := c.cmd.Wait(); err != nil {
+		return err
+	}
 	return nil
 }
 
