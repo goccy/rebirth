@@ -61,6 +61,9 @@ func (r *Reloader) Run() error {
 		if err := r.xbuildRebirth(); err != nil {
 			return xerrors.Errorf("failed to cross compile for rebirth: %w", err)
 		}
+		if err := r.xbuild(buildPath, "."); err != nil {
+			return xerrors.Errorf("failed to build on host: %w", err)
+		}
 		go NewDockerCommand(r.host.Docker, dockerRebirthPath).Run()
 	}
 	r.watchReloadSignal()
