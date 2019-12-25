@@ -169,11 +169,7 @@ func (r *Reloader) reload() (e error) {
 		execCmd.AddEnv(env)
 	}
 	r.cmd = execCmd
-	go func() {
-		if err := execCmd.RunWithStdoutPipeOnly(); err != nil {
-			fmt.Println(err)
-		}
-	}()
+	execCmd.RunAsync()
 	return nil
 }
 

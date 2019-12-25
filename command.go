@@ -89,7 +89,7 @@ func (c *Command) Run() error {
 	return nil
 }
 
-func (c *Command) RunWithStdoutPipeOnly() error {
+func (c *Command) runWithStdCopy() error {
 	stdout, err := c.cmd.StdoutPipe()
 	if err != nil {
 		return xerrors.Errorf("failed to pipe stdout: %w", err)
@@ -107,6 +107,14 @@ func (c *Command) RunWithStdoutPipeOnly() error {
 		return err
 	}
 	return nil
+}
+
+func (c *Command) RunAsync() {
+	go func() {
+		if err := c.runWithStdCopy(); err != nil {
+			fmt.Println(err)
+		}
+	}()
 }
 
 type DockerCommand struct {
