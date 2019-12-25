@@ -89,6 +89,19 @@ func (c *Command) Run() error {
 	return nil
 }
 
+func (c *Command) RunAsync() error {
+	stdout, err := c.cmd.StdoutPipe()
+	if err != nil {
+		return xerrors.Errorf("failed to pipe stdout: %w", err)
+	}
+	// TODO: if try to capture by StderrPipe(), occurred unexpected hang
+	if err := c.cmd.Start(); err != nil {
+		return xerrors.Errorf("failed to run build command: %w", err)
+	}
+	io.Copy(os.Stdout, stdout)
+	return nil
+}
+
 type DockerCommand struct {
 	container string
 	cmd       []string
