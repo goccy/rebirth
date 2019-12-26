@@ -11,6 +11,7 @@ require (
 	github.com/fsnotify/fsnotify v1.4.7 // indirect
 	github.com/goccy/go-yaml v1.1.5
 	github.com/jessevdk/go-flags v1.4.0
+	github.com/mitchellh/go-ps v0.0.0-20190716172923-621e5597135b
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3 // indirect
 	golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898

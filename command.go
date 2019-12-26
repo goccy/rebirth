@@ -17,6 +17,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/goccy/rebirth/internal/errors"
+	"github.com/mitchellh/go-ps"
 	"golang.org/x/xerrors"
 )
 
@@ -59,8 +60,15 @@ func (c *Command) Stop() error {
 	if c.cmd.Process == nil {
 		return nil
 	}
-	if err := c.cmd.Process.Kill(); err != nil {
-		return xerrors.Errorf("failed to kill process: %w", err)
+	pid := c.cmd.Process.Pid
+	process, err := ps.FindProcess(pid)
+	if err != nil {
+		return xerrors.Errorf("failed to find process by pid(%d): %w", pid, err)
+	}
+	if process != nil {
+		if err := c.cmd.Process.Kill(); err != nil {
+			return xerrors.Errorf("failed to kill process: %w", err)
+		}
 	}
 	return nil
 }
