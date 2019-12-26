@@ -65,6 +65,14 @@ func (r *Reloader) Run() error {
 			return xerrors.Errorf("failed to build on host: %w", err)
 		}
 		go NewDockerCommand(r.host.Docker, dockerRebirthPath).Run()
+	} else {
+		// running reloader on localhost
+		if err := r.xbuild(buildPath, "."); err != nil {
+			return xerrors.Errorf("failed to build on host: %w", err)
+		}
+		if err := r.reload(); err != nil {
+			return xerrors.Errorf("failed to reload: %w", err)
+		}
 	}
 	r.watchReloadSignal()
 	for {
@@ -84,7 +92,6 @@ func (r *Reloader) IsEnabledReload() bool {
 }
 
 func (r *Reloader) Reload() error {
-	fmt.Println("Building....")
 	if err := r.xbuild(buildPath, "."); err != nil {
 		return xerrors.Errorf("failed to build on host: %w", err)
 	}
@@ -212,6 +219,7 @@ func (r *Reloader) xbuildRebirth() error {
 }
 
 func (r *Reloader) xbuild(target, source string) error {
+	fmt.Println("Building....")
 	gocmd := NewGoCommand()
 	if r.build != nil {
 		env := []string{}

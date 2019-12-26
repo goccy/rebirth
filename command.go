@@ -248,12 +248,8 @@ func (c *GoCommand) SetDir(dir string) {
 }
 
 func (c *GoCommand) Build(args ...string) error {
-	cmd := []string{
-		"go",
-		"build",
-		"--ldflags",
-		`-linkmode external -extldflags "-static"`,
-	}
+	cmd := []string{"go", "build"}
+	cmd = append(cmd, c.linkerFlags()...)
 	cmd = append(cmd, args...)
 	if err := c.run(cmd...); err != nil {
 		return xerrors.Errorf("failed to run: %w", err)
@@ -263,12 +259,8 @@ func (c *GoCommand) Build(args ...string) error {
 
 func (c *GoCommand) Run(args ...string) error {
 	if !c.isCrossBuild {
-		cmd := []string{
-			"go",
-			"run",
-			"--ldflags",
-			`-linkmode external -extldflags "-static"`,
-		}
+		cmd := []string{"go", "run"}
+		cmd = append(cmd, c.linkerFlags()...)
 		cmd = append(cmd, args...)
 		if err := c.run(cmd...); err != nil {
 			return xerrors.Errorf("failed to run: %w", err)
@@ -281,14 +273,8 @@ func (c *GoCommand) Run(args ...string) error {
 		return xerrors.Errorf("failed to create temporary file: %w", err)
 	}
 	defer os.Remove(tmpfile.Name())
-	cmd := []string{
-		"go",
-		"build",
-		"-o",
-		tmpfile.Name(),
-		"--ldflags",
-		`-linkmode external -extldflags "-static"`,
-	}
+	cmd := []string{"go", "build", "-o", tmpfile.Name()}
+	cmd = append(cmd, c.linkerFlags()...)
 	cmd = append(cmd, args...)
 	if err := c.run(cmd...); err != nil {
 		return xerrors.Errorf("failed to run: %w", err)
@@ -303,12 +289,8 @@ func (c *GoCommand) Run(args ...string) error {
 
 func (c *GoCommand) Test(args ...string) error {
 	if !c.isCrossBuild {
-		cmd := []string{
-			"go",
-			"test",
-			"--ldflags",
-			`-linkmode external -extldflags "-static"`,
-		}
+		cmd := []string{"go", "test"}
+		cmd = append(cmd, c.linkerFlags()...)
 		cmd = append(cmd, args...)
 		if err := c.run(cmd...); err != nil {
 			return xerrors.Errorf("failed to run: %w", err)
@@ -316,15 +298,8 @@ func (c *GoCommand) Test(args ...string) error {
 		return nil
 	}
 
-	cmd := []string{
-		"go",
-		"test",
-		"-c",
-		"-o",
-		filepath.Join(configDir, "app.test"),
-		"--ldflags",
-		`-linkmode external -extldflags "-static"`,
-	}
+	cmd := []string{"go", "test", "-c", "-o", filepath.Join(configDir, "app.test")}
+	cmd = append(cmd, c.linkerFlags()...)
 	cmd = append(cmd, args...)
 	if err := c.run(cmd...); err != nil {
 		return xerrors.Errorf("failed to run: %w", err)
@@ -344,6 +319,16 @@ func (c *GoCommand) Test(args ...string) error {
 		return xerrors.Errorf("failed to run on docker container: %w", err)
 	}
 	return nil
+}
+
+func (c *GoCommand) linkerFlags() []string {
+	if c.isCrossBuild {
+		return []string{
+			"--ldflags",
+			`-linkmode external -extldflags "-static"`,
+		}
+	}
+	return []string{}
 }
 
 func (c *GoCommand) run(args ...string) error {
