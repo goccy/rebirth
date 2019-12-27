@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/goccy/rebirth"
@@ -27,6 +28,10 @@ type RunCommand struct{}
 type TestCommand struct{}
 type BuildCommand struct{}
 type WatchCommand struct{}
+
+type TaskCommand struct {
+	tasks []string
+}
 
 func (cmd *InitCommand) Execute(args []string) error {
 	if rebirth.ExistsConfig() {
@@ -163,6 +168,16 @@ func (cmd *WatchCommand) Execute(args []string) error {
 	return nil
 }
 
+func (cmd *TaskCommand) Execute(args []string) error {
+	for _, task := range cmd.tasks {
+		gocmd := rebirth.NewGoCommand()
+		if err := gocmd.RunInGoContext(strings.Split(task, " ")...); err != nil {
+			return xerrors.Errorf("failed to run command %s: %w", cmd, err)
+		}
+	}
+	return nil
+}
+
 var opts Option
 
 func main() {
@@ -178,5 +193,18 @@ func main() {
 	}
 	os.Args = args
 	parser := flags.NewParser(&opts, flags.Default)
+	if rebirth.ExistsConfig() {
+		cfg, err := rebirth.LoadConfig("rebirth.yml")
+		if err == nil {
+			for name, task := range cfg.Task {
+				var cmd TaskCommand
+				cmd.tasks = task.Commands
+				if _, err := parser.AddCommand(name, task.Desc, task.Desc, &cmd); err != nil {
+					log.Fatal(err)
+				}
+			}
+		}
+	}
+
 	parser.Parse()
 }

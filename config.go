@@ -13,6 +13,7 @@ type Config struct {
 	Build *Build `yaml:"build,omitempty"`
 	Run   *Run   `yaml:"run,omitempty"`
 	Watch *Watch `yaml:"watch,omitempty"`
+	Task map[string]*Task `yaml:"task,omitempty"`
 }
 
 type Host struct {
@@ -20,7 +21,10 @@ type Host struct {
 }
 
 type Build struct {
-	Env map[string]string `yaml:"env,omitempty"`
+	Env    map[string]string `yaml:"env,omitempty"`
+	Init   []string          `yaml:"init,omitempty"`
+	Before []string          `yaml:"before,omitempty"`
+	After  []string          `yaml:"after,omitempty"`
 }
 
 type Run struct {
@@ -30,6 +34,11 @@ type Run struct {
 type Watch struct {
 	Root   string   `yaml:"root,omitempty"`
 	Ignore []string `yaml:"ignore,omitempty"`
+}
+
+type Task struct {
+	Desc string `yaml:"desc,omitempty"`
+	Commands []string `yaml:"commands,omitempty"`
 }
 
 func LoadConfig(confPath string) (*Config, error) {

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -61,12 +62,18 @@ func (r *Reloader) Run() error {
 		if err := r.xbuildRebirth(); err != nil {
 			return xerrors.Errorf("failed to cross compile for rebirth: %w", err)
 		}
+		if err := r.runBuildInitCommands(); err != nil {
+			return xerrors.Errorf("failed to build.init commands: %w", err)
+		}
 		if err := r.xbuild(buildPath, "."); err != nil {
 			return xerrors.Errorf("failed to build on host: %w", err)
 		}
 		go NewDockerCommand(r.host.Docker, dockerRebirthPath).Run()
 	} else {
 		// running reloader on localhost
+		if err := r.runBuildInitCommands(); err != nil {
+			return xerrors.Errorf("failed to build.init commands: %w", err)
+		}
 		if err := r.xbuild(buildPath, "."); err != nil {
 			return xerrors.Errorf("failed to build on host: %w", err)
 		}
@@ -77,6 +84,49 @@ func (r *Reloader) Run() error {
 	r.watchReloadSignal()
 	for {
 		time.Sleep(1 * time.Second)
+	}
+	return nil
+}
+
+func (r *Reloader) runBuildHookCommandInGoContext(cmd string) error {
+	gocmd := NewGoCommand()
+	env := []string{}
+	for k, v := range r.build.Env {
+		env = append(env, fmt.Sprintf("%s=%s", k, ExpandPath(v)))
+	}
+	gocmd.AddEnv(env)
+	if err := gocmd.RunInGoContext(strings.Split(cmd, " ")...); err != nil {
+		return xerrors.Errorf("failed to run command %s: %w", cmd, err)
+	}
+	return nil
+}
+
+func (r *Reloader) runBuildInitCommands() error {
+	for _, cmd := range r.build.Init {
+		fmt.Printf("Running: %s\n", cmd)
+		if err := r.runBuildHookCommandInGoContext(cmd); err != nil {
+			return xerrors.Errorf("failed to run command in build.init: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *Reloader) runBuildBeforeCommands() error {
+	for _, cmd := range r.build.Before {
+		fmt.Printf("Running: %s\n", cmd)
+		if err := r.runBuildHookCommandInGoContext(cmd); err != nil {
+			return xerrors.Errorf("failed to run command in build.before: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *Reloader) runBuildAfterCommands() error {
+	for _, cmd := range r.build.After {
+		fmt.Printf("Running: %s\n", cmd)
+		if err := r.runBuildHookCommandInGoContext(cmd); err != nil {
+			return xerrors.Errorf("failed to run command in build.after: %w", err)
+		}
 	}
 	return nil
 }
@@ -220,6 +270,9 @@ func (r *Reloader) xbuildRebirth() error {
 
 func (r *Reloader) xbuild(target, source string) error {
 	fmt.Println("Building....")
+	if err := r.runBuildBeforeCommands(); err != nil {
+		return xerrors.Errorf("failed to run build.before commands: %w", err)
+	}
 	gocmd := NewGoCommand()
 	if r.build != nil {
 		env := []string{}
@@ -233,6 +286,9 @@ func (r *Reloader) xbuild(target, source string) error {
 	}
 	if err := gocmd.Build("-o", target, source); err != nil {
 		return xerrors.Errorf("failed to build: %w", err)
+	}
+	if err := r.runBuildAfterCommands(); err != nil {
+		return xerrors.Errorf("failed to run build.after commands: %w", err)
 	}
 	return nil
 }
