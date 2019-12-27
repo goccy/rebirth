@@ -74,30 +74,21 @@ func (c *Command) Stop() error {
 }
 
 func (c *Command) Run() error {
-	stdout, err := c.cmd.StdoutPipe()
-	if err != nil {
-		return xerrors.Errorf("failed to pipe stdout: %w", err)
-	}
-	stderr, err := c.cmd.StderrPipe()
-	if err != nil {
-		return xerrors.Errorf("failed to pipe stderr: %w", err)
-	}
-
-	if err := c.cmd.Start(); err != nil {
-		return xerrors.Errorf("failed to run build command: %w", err)
-	}
-	io.Copy(os.Stdout, stdout)
-	errstream, err := ioutil.ReadAll(stderr)
-	if err != nil {
-		return xerrors.Errorf("failed to read from stderr: %w", err)
-	}
-	if err := c.cmd.Wait(); err != nil {
-		return xerrors.New(string(errstream))
+	if err := c.run(); err != nil {
+		return xerrors.Errorf("failed to run: %w", err)
 	}
 	return nil
 }
 
-func (c *Command) runWithStdCopy() error {
+func (c *Command) RunAsync() {
+	go func() {
+		if err := c.run(); err != nil {
+			fmt.Println(err)
+		}
+	}()
+}
+
+func (c *Command) run() error {
 	stdout, err := c.cmd.StdoutPipe()
 	if err != nil {
 		return xerrors.Errorf("failed to pipe stdout: %w", err)
@@ -115,14 +106,6 @@ func (c *Command) runWithStdCopy() error {
 		return err
 	}
 	return nil
-}
-
-func (c *Command) RunAsync() {
-	go func() {
-		if err := c.runWithStdCopy(); err != nil {
-			fmt.Println(err)
-		}
-	}()
 }
 
 type DockerCommand struct {
@@ -247,6 +230,31 @@ func (c *GoCommand) SetDir(dir string) {
 	c.dir = dir
 }
 
+func (c *GoCommand) RunInGoContext(args ...string) error {
+	cmd := NewCommand(args...)
+	env := []string{}
+	if c.dir == "" {
+		symlinkPath, err := c.getOrCreateSymlink()
+		if err != nil {
+			return xerrors.Errorf("failed to get symlink path: %w", err)
+		}
+		gopath, err := c.gopath()
+		if err != nil {
+			return xerrors.Errorf("failed to get GOPATH: %w", err)
+		}
+		env = append(env, fmt.Sprintf("GOPATH=%s", gopath))
+		env = append(env, fmt.Sprintf("PATH=%s:%s/bin", os.Getenv("PATH"), gopath))
+		cmd.SetDir(symlinkPath)
+	} else {
+		cmd.SetDir(c.dir)
+	}
+	cmd.AddEnv(env)
+	if err := cmd.Run(); err != nil {
+		return xerrors.Errorf("failed to command: %w", err)
+	}
+	return nil
+}
+
 func (c *GoCommand) Build(args ...string) error {
 	cmd := []string{"go", "build"}
 	cmd = append(cmd, c.linkerFlags()...)
@@ -268,19 +276,30 @@ func (c *GoCommand) Run(args ...string) error {
 		return nil
 	}
 
+	if len(args) == 0 {
+		return xerrors.New("go run: no go files listed")
+	}
+	if filepath.Ext(args[0]) != ".go" {
+		return xerrors.New("go run: no go files listed")
+	}
 	tmpfile, err := ioutil.TempFile(configDir, "script")
 	if err != nil {
 		return xerrors.Errorf("failed to create temporary file: %w", err)
 	}
 	defer os.Remove(tmpfile.Name())
+	gofile := args[0]
+	var goargs []string
+	if len(args) > 1 {
+		goargs = args[1:]
+	}
 	cmd := []string{"go", "build", "-o", tmpfile.Name()}
 	cmd = append(cmd, c.linkerFlags()...)
-	cmd = append(cmd, args...)
+	cmd = append(cmd, gofile)
 	if err := c.run(cmd...); err != nil {
 		return xerrors.Errorf("failed to run: %w", err)
 	}
 	dockerCmd := []string{tmpfile.Name()}
-	dockerCmd = append(dockerCmd, args...)
+	dockerCmd = append(dockerCmd, goargs...)
 	if err := NewDockerCommand(c.container, dockerCmd...).Run(); err != nil {
 		return xerrors.Errorf("failed to run on docker container: %w", err)
 	}
@@ -347,6 +366,7 @@ func (c *GoCommand) run(args ...string) error {
 			return xerrors.Errorf("failed to get GOPATH: %w", err)
 		}
 		env = append(env, fmt.Sprintf("GOPATH=%s", gopath))
+		env = append(env, fmt.Sprintf("PATH=%s:%s/bin", os.Getenv("PATH"), gopath))
 		cmd.SetDir(symlinkPath)
 	} else {
 		cmd.SetDir(c.dir)
