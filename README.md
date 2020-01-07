@@ -20,9 +20,20 @@ Supports live reloading for Go
 `rebirth.yml` example is the following.
 
 ```yaml
+task:
+  migrate:
+    desc: migrate schema
+    commands:
+      - mysql ....
 host:
   docker: container_name
 build:
+  init:
+    - echo 'init hook' # called once at starting
+  before:
+    - echo 'before hook' # called before build
+  after:
+    - echo 'after hook' # called after build
   env:
     CGO_LDFLAGS: /usr/local/lib/libz.a
 run:
@@ -34,6 +45,7 @@ watch:
     - vendor
 ```
 
+- `task` : define custom command
 - `host` : specify host information for running to an application ( currently, supports `docker` only )
 - `build` : specify ENV variables for building
 - `run` : specify ENV variables for running
