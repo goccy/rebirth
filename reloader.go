@@ -102,6 +102,9 @@ func (r *Reloader) runBuildHookCommandInGoContext(cmd string) error {
 }
 
 func (r *Reloader) runBuildInitCommands() error {
+	if r.build == nil {
+		return nil
+	}
 	for _, cmd := range r.build.Init {
 		fmt.Printf("Running: %s\n", cmd)
 		if err := r.runBuildHookCommandInGoContext(cmd); err != nil {
@@ -112,6 +115,9 @@ func (r *Reloader) runBuildInitCommands() error {
 }
 
 func (r *Reloader) runBuildBeforeCommands() error {
+	if r.build == nil {
+		return nil
+	}
 	for _, cmd := range r.build.Before {
 		fmt.Printf("Running: %s\n", cmd)
 		if err := r.runBuildHookCommandInGoContext(cmd); err != nil {
@@ -122,6 +128,9 @@ func (r *Reloader) runBuildBeforeCommands() error {
 }
 
 func (r *Reloader) runBuildAfterCommands() error {
+	if r.build == nil {
+		return nil
+	}
 	for _, cmd := range r.build.After {
 		fmt.Printf("Running: %s\n", cmd)
 		if err := r.runBuildHookCommandInGoContext(cmd); err != nil {
