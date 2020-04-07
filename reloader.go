@@ -3,6 +3,7 @@ package rebirth
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -66,7 +67,7 @@ func (r *Reloader) Run() error {
 			return xerrors.Errorf("failed to build.init commands: %w", err)
 		}
 		if err := r.xbuild(buildPath, "."); err != nil {
-			return xerrors.Errorf("failed to build on host: %w", err)
+			log.Println(xerrors.Errorf("failed to build on host: %w", err))
 		}
 		go NewDockerCommand(r.host.Docker, dockerRebirthPath).Run()
 	} else {
@@ -75,7 +76,7 @@ func (r *Reloader) Run() error {
 			return xerrors.Errorf("failed to build.init commands: %w", err)
 		}
 		if err := r.xbuild(buildPath, "."); err != nil {
-			return xerrors.Errorf("failed to build on host: %w", err)
+			log.Println(xerrors.Errorf("failed to build on host: %w", err))
 		}
 		if err := r.reload(); err != nil {
 			return xerrors.Errorf("failed to reload: %w", err)
