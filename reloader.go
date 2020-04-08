@@ -51,6 +51,17 @@ func NewReloader(cfg *Config) *Reloader {
 	}
 }
 
+func (r *Reloader) xbuildMain(path string) error {
+	mainPkgPath := "."
+	if r.build != nil && r.build.Main != "" {
+		mainPkgPath = r.build.Main
+	}
+	if err := r.xbuild(path, mainPkgPath); err != nil {
+		return xerrors.Errorf("failed to build on host: %w", err)
+	}
+	return nil
+}
+
 func (r *Reloader) Run() error {
 	if !r.IsEnabledReload() {
 		if err := r.writePID(); err != nil {
@@ -66,8 +77,8 @@ func (r *Reloader) Run() error {
 		if err := r.runBuildInitCommands(); err != nil {
 			return xerrors.Errorf("failed to build.init commands: %w", err)
 		}
-		if err := r.xbuild(buildPath, "."); err != nil {
-			log.Println(xerrors.Errorf("failed to build on host: %w", err))
+		if err := r.xbuildMain(buildPath); err != nil {
+			log.Println(xerrors.Errorf("failed to build main: %w", err))
 		}
 		go NewDockerCommand(r.host.Docker, dockerRebirthPath).Run()
 	} else {
@@ -75,8 +86,8 @@ func (r *Reloader) Run() error {
 		if err := r.runBuildInitCommands(); err != nil {
 			return xerrors.Errorf("failed to build.init commands: %w", err)
 		}
-		if err := r.xbuild(buildPath, "."); err != nil {
-			log.Println(xerrors.Errorf("failed to build on host: %w", err))
+		if err := r.xbuildMain(buildPath); err != nil {
+			log.Println(xerrors.Errorf("failed to build main: %w", err))
 		}
 		if err := r.reload(); err != nil {
 			return xerrors.Errorf("failed to reload: %w", err)
@@ -152,8 +163,8 @@ func (r *Reloader) IsEnabledReload() bool {
 }
 
 func (r *Reloader) Reload() error {
-	if err := r.xbuild(buildPath, "."); err != nil {
-		return xerrors.Errorf("failed to build on host: %w", err)
+	if err := r.xbuildMain(buildPath); err != nil {
+		return xerrors.Errorf("failed to build main: %w", err)
 	}
 	if err := r.sendReloadingSignal(); err != nil {
 		return xerrors.Errorf("failed to send reloading signal: %w", err)

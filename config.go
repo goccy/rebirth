@@ -9,11 +9,11 @@ import (
 )
 
 type Config struct {
-	Host  *Host  `yaml:"host,omitempty"`
-	Build *Build `yaml:"build,omitempty"`
-	Run   *Run   `yaml:"run,omitempty"`
-	Watch *Watch `yaml:"watch,omitempty"`
-	Task map[string]*Task `yaml:"task,omitempty"`
+	Host  *Host            `yaml:"host,omitempty"`
+	Build *Build           `yaml:"build,omitempty"`
+	Run   *Run             `yaml:"run,omitempty"`
+	Watch *Watch           `yaml:"watch,omitempty"`
+	Task  map[string]*Task `yaml:"task,omitempty"`
 }
 
 type Host struct {
@@ -21,6 +21,7 @@ type Host struct {
 }
 
 type Build struct {
+	Main   string            `yaml:"main,omitempty"`
 	Env    map[string]string `yaml:"env,omitempty"`
 	Init   []string          `yaml:"init,omitempty"`
 	Before []string          `yaml:"before,omitempty"`
@@ -37,7 +38,7 @@ type Watch struct {
 }
 
 type Task struct {
-	Desc string `yaml:"desc,omitempty"`
+	Desc     string   `yaml:"desc,omitempty"`
 	Commands []string `yaml:"commands,omitempty"`
 }
 
