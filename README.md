@@ -28,6 +28,7 @@ task:
 host:
   docker: container_name
 build:
+  main: path/to/main.go # change path to main package ( default: . )
   init:
     - echo 'init hook' # called once at starting
   before:
