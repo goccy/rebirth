@@ -95,6 +95,9 @@ func (w *Watcher) watchPaths() []string {
 	ignorePaths := w.ignorePaths()
 	pathMap := map[string]struct{}{}
 	filepath.Walk(w.root(), func(path string, info os.FileInfo, err error) error {
+		if info == nil {
+			return nil
+		}
 		if !info.IsDir() {
 			return nil
 		}
